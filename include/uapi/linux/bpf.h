@@ -1058,6 +1058,7 @@ enum bpf_prog_type {
 	BPF_PROG_TYPE_SK_LOOKUP,
 	BPF_PROG_TYPE_SYSCALL, /* a program that can execute syscalls */
 	BPF_PROG_TYPE_NETFILTER,
+	BPF_PROG_TYPE_CGROUP_SYSCALL,
 	__MAX_BPF_PROG_TYPE
 };
 
@@ -1120,6 +1121,17 @@ enum bpf_attach_type {
 	BPF_NETKIT_PEER,
 	BPF_TRACE_KPROBE_SESSION,
 	BPF_TRACE_UPROBE_SESSION,
+	BPF_CGROUP_SYSCALL_SOCKET,
+	BPF_CGROUP_SYSCALL_SOCKET_EXIT,
+	BPF_CGROUP_SYSCALL_SENDMSG,
+	BPF_CGROUP_SYSCALL_SENDTO,
+	BPF_CGROUP_SYSCALL_RECVMSG,
+	BPF_CGROUP_SYSCALL_RECVMSG_EXIT,
+	BPF_CGROUP_SYSCALL_BIND,
+	BPF_CGROUP_SYSCALL_SETSOCKOPT,
+	BPF_CGROUP_SYSCALL_GETSOCKNAME,
+	BPF_CGROUP_SYSCALL_CONNECT,
+	BPF_CGROUP_SYSCALL_ACCEPT_EXIT,
 	__MAX_BPF_ATTACH_TYPE
 };
 
@@ -1506,7 +1518,7 @@ union bpf_attr {
 		__s32	map_token_fd;
 	};
 
-	struct { /* anonymous struct used by BPF_MAP_*_ELEM and BPF_MAP_FREEZE commands */
+	struct { /* anonymous struct used by BPF_MAP_*_ELEM commands */
 		__u32		map_fd;
 		__aligned_u64	key;
 		union {
@@ -1995,15 +2007,11 @@ union bpf_attr {
  * long bpf_skb_store_bytes(struct sk_buff *skb, u32 offset, const void *from, u32 len, u64 flags)
  * 	Description
  * 		Store *len* bytes from address *from* into the packet
- * 		associated to *skb*, at *offset*. The *flags* are a combination
- * 		of the following values:
- *
- * 		**BPF_F_RECOMPUTE_CSUM**
- * 			Automatically update *skb*\ **->csum** after storing the
- * 			bytes.
- * 		**BPF_F_INVALIDATE_HASH**
- * 			Set *skb*\ **->hash**, *skb*\ **->swhash** and *skb*\
- * 			**->l4hash** to 0.
+ * 		associated to *skb*, at *offset*. *flags* are a combination of
+ * 		**BPF_F_RECOMPUTE_CSUM** (automatically recompute the
+ * 		checksum for the packet after storing the bytes) and
+ * 		**BPF_F_INVALIDATE_HASH** (set *skb*\ **->hash**, *skb*\
+ * 		**->swhash** and *skb*\ **->l4hash** to 0).
  *
  * 		A call to this helper is susceptible to change the underlying
  * 		packet buffer. Therefore, at load time, all checks on pointers
@@ -2055,7 +2063,7 @@ union bpf_attr {
  * 		untouched (unless **BPF_F_MARK_ENFORCE** is added as well), and
  * 		for updates resulting in a null checksum the value is set to
  * 		**CSUM_MANGLED_0** instead. Flag **BPF_F_PSEUDO_HDR** indicates
- * 		that the modified header field is part of the pseudo-header.
+ * 		the checksum is to be computed against a pseudo-header.
  *
  * 		This helper works in combination with **bpf_csum_diff**\ (),
  * 		which does not update the checksum in-place, but offers more
@@ -6787,6 +6795,89 @@ struct bpf_sock_addr {
 				 * Stored in network byte order.
 				 */
 	__bpf_md_ptr(struct bpf_sock *, sk);
+};
+
+struct bpf_cg_syscall_socket {
+	__u32 family;
+	__u32 type;
+	__u32 protocol;
+	__s32 ret;
+};
+
+struct bpf_cg_syscall_socket_exit {
+	__u32 family;
+	__u32 type;
+	__u32 protocol;
+	__u32 fd;
+	__s32 ret;
+};
+
+struct bpf_cg_syscall_sendmsg {
+	__u32 fd;
+	__bpf_md_ptr(struct user_msghdr *, msg);
+	__u32 flags;
+	__s32 ret;
+};
+
+struct bpf_cg_syscall_sendto {
+	__u32 fd;
+	__bpf_md_ptr(void *, buff);
+	__u32 len;
+	__u32 flags;
+	char ss_data[128];
+	__u32 addr_len;
+	__s32 ret;
+};
+
+struct bpf_cg_syscall_recvmsg {
+	__u32 fd;
+	__bpf_md_ptr(struct user_msghdr *, msg);
+	__u32 flags;
+	__s32 ret;
+};
+
+struct bpf_cg_syscall_recvmsg_exit {
+	__u32 fd;
+	__bpf_md_ptr(struct user_msghdr *, msg);
+	__u32 flags;
+	__s32 ret;
+};
+
+struct bpf_cg_syscall_bind {
+	__u32 fd;
+	char ss_data[128];
+	__u32 addrlen;
+	__s32 ret;
+};
+
+struct bpf_cg_syscall_setsockopt {
+	__u32 fd;
+	__u32 level;
+	__u32 optname;
+	__bpf_md_ptr(char *, user_optval);
+	__u32 optlen;
+	__s32 ret;
+};
+
+struct bpf_cg_syscall_getsockname {
+	__u32 fd;
+	__bpf_md_ptr(struct sockaddr *, usockaddr);
+	__bpf_md_ptr(int *, usockaddr_len);
+	__s32 ret;
+};
+
+struct bpf_cg_syscall_connect {
+	__u32 fd;
+	char ss_data[128];
+	__u32 addrlen;
+	__s32 ret;
+};
+
+struct bpf_cg_syscall_accept_exit {
+	__u32 fd;
+	char ss_data[128];
+	__u32 addrlen;
+	__s32 ret;
 };
 
 /* User bpf_sock_ops struct to access socket values and specify request ops
