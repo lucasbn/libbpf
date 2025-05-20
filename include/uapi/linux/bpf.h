@@ -6884,8 +6884,7 @@ struct bpf_cg_syscall_accept_exit {
 struct bpf_cg_syscall_uname {
 	__bpf_md_ptr(struct new_utsname *, name);
 	__s32 ret;
-}
-
+};
 
 /* User bpf_sock_ops struct to access socket values and specify request ops
  * and their replies.
